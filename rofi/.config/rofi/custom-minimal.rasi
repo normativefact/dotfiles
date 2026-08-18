@@ -1,0 +1,58 @@
+* {
+    bg: #11111b;
+    fg: #cdd6f4;
+    accent: #89b4fa;
+    urgent: #f38ba8;
+    bg-selected: #313244;
+    
+    background-color: transparent;
+    text-color: @fg;
+    font: "JetBrainsMono Nerd Font 11";
+}
+
+window {
+    background-color: @bg;
+    border: 2px;
+    border-color: @accent;
+    border-radius: 12px;
+    width: 600px;
+    padding: 20px;
+}
+
+inputbar {
+    children: [ prompt, entry ];
+    background-color: @bg-selected;
+    border-radius: 8px;
+    padding: 10px;
+    margin: 0px 0px 15px 0px;
+}
+
+prompt {
+    text-color: @accent;
+    margin: 0px 10px 0px 0px;
+    font: "JetBrainsMono Nerd Font Bold 11";
+}
+
+entry {
+    placeholder: "Search Clipboard...";
+    placeholder-color: #6c7086;
+}
+
+listview {
+    columns: 1;
+    lines: 8;
+    fixed-height: true;
+    scrollbar: false;
+}
+
+element {
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin: 2px 0px;
+}
+
+element selected {
+    background-color: @bg-selected;
+    text-color: @accent;
+}
+

@@ -1,0 +1,14 @@
+configuration {
+    /* Enable Vim-like navigation shortcuts */
+    kb-row-up: "Up,Control+k";
+    kb-row-down: "Down,Control+j";
+    kb-mode-next: "Shift+Right,Control+l";
+    kb-mode-previous: "Shift+Left,Control+h";
+    kb-accept-entry: "Control+m,Return,KP_Enter";
+    
+    /* Clear conflicting default hotkeys */
+    kb-remove-to-eol: "";
+    kb-remove-char-back: "BackSpace";
+    kb-mode-complete: "";
+}
+@theme "custom-minimal"
