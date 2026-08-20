@@ -1,25 +1,9 @@
 cat << 'EOF' > ~/dotfiles/.gitignore
-# General OS & Temp
 *.log
 *.tmp
 .DS_Store
-
-# Zen / Firefox caches & runtime databases
-**/.cache/
-**/cache2/
-**/datareporting/
-**/saved-telemetry-pings/
-**/storage/
-**/safebrowsing/
-**/*.sqlite*
-**/*.sqlite-journal
-**/sessionstore*
-
-# Obsidian workspace state & index caches
 **/.obsidian/workspace*
 **/.obsidian/cache/
-
-# Zotero databases and binaries
 **/storage/
 **/*.sqlite*
 EOF
