@@ -5,7 +5,7 @@ set -e
 
 echo "🚀 Starting dotfiles installation..."
 
-stow-cmd="stow -v -t ~ kitty hyprland zotero obsidian nvim waybar edit-config-scipt"
+stow-cmd="stow -v -t ~ kitty hyprland zotero obsidian nvim waybar edit-config-script zellij bashrc rofi wallpapers"
 
 # Step 1: Ensure we are in the right directory
 cd "$HOME/dotfiles"
