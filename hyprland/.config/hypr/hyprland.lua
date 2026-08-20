@@ -8,25 +8,45 @@ require("binds")
 ---- AUTOSTART ----
 -------------------
 hl.on("hyprland.start", function()
-    hl.exec_cmd("swaybg -i /home/normativefact/wallpaper/mountain-dark.jpg")
+    hl.exec_cmd("swaybg -i /home/normativefact/Downloads/wallpapers/mountain-dark.jpg")
 end)
-
 hl.on("hyprland.start", function()
     hl.exec_cmd("waybar")
 end)
 
+
+
+-- Scratchpad Area Win + S
 hl.on("hyprland.start", function()
-    hl.exec_cmd("workspace special:scratchpad] kitty --class scratchpad -e nvim ~/Notes/friction_log.md")
+    hl.exec_cmd("kitty --class scratchpad -e nvim /home/normativefact/notes/ .", {workspace = "special:scratchpad"})
 end)
 
+
+-- Zen Browser
+
 hl.on("hyprland.start", function()
-    hl.exec_cmd("zen-browser")
+    hl.exec_cmd("zen-beta", {workspace = 2})
 end)
 
+-- Zathura
+
+hl.on("hyprland.start", function()
+    hl.exec_cmd("zathura", {workspace = 1})
+end)
+
+-- Obsidian nvim
+
+hl.on("hyprland.start", function()
+    hl.exec_cmd("kitty --class scratchpad -e nvim /home/normativefact/notes/ .", {workspace = 1})
+end)
+
+
+-- Clipboard hist trim every 30m
 hl.on("hyprland.start", function()
     hl.exec_cmd("~/.config/hypr/cliphis-trim.sh")
 end)
 
+-- Clipboard Watch 
 hl.on("hyprland.start", function()
     hl.exec_cmd("wl-paste --type text --watch cliphist store & wl-paste --type image --watch cliphist store &")
 end)

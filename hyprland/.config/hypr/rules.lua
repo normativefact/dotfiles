@@ -145,6 +145,7 @@ hl.window_rule({
 	name = "Scratchpad",
 	match = {class = "scratchpad"},
 	opacity = 0.9,
+	workspace = specialscratchpad,
 })
 
 
