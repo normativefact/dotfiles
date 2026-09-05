@@ -1,0 +1,72 @@
+# { pkgs, lib, ... }:
+# let
+#   browser = "zen-beta.desktop";
+#   pdfViewer = "sioyek.desktop";
+#   fileManager = "yazi.desktop";
+# in
+# {
+#   # Terminal wrapper so GUI apps can open directories inside Yazi
+#   xdg.desktopEntries.yazi = {
+#     name = "Yazi";
+#     genericName = "File Manager";
+#     icon = "folder";
+#     # Change kitty to your terminal (e.g. foot, kitty, alacritty)
+#     exec = "${lib.getExe pkgs.kitty} -e ${lib.getExe pkgs.yazi} %u";
+#     terminal = false;
+#     categories = [ "System" "FileManager" ];
+#     mimeType = [ "inode/directory" ];
+#   };
+#
+#   xdg.mimeApps = {
+#     enable = true;
+#
+#     defaultApplications = {
+#       # Web & HTML
+#       "x-scheme-handler/http" = browser;
+#       "x-scheme-handler/https" = browser;
+#       "x-scheme-handler/about" = browser;
+#       "x-scheme-handler/unknown" = browser;
+#       "x-scheme-handler/chrome" = browser;
+#       "text/html" = browser;
+#       "application/x-extension-htm" = browser;
+#       "application/x-extension-html" = browser;
+#       "application/x-extension-shtml" = browser;
+#       "application/xhtml+xml" = browser;
+#       "application/x-extension-xhtml" = browser;
+#       "application/x-extension-xht" = browser;
+#
+#       # Documents & Directories
+#       "application/pdf" = pdfViewer;
+#       "inode/directory" = fileManager;
+#
+#       # Images (handled by Zen)
+#       "image/png" = browser;
+#       "image/jpeg" = browser;
+#       "image/gif" = browser;
+#       "image/webp" = browser;
+#       "image/svg+xml" = browser;
+#
+#       # Videos & Audio (handled by Zen)
+#       "video/mp4" = browser;
+#       "video/webm" = browser;
+#       "video/x-matroska" = browser;
+#       "audio/mpeg" = browser;
+#       "audio/ogg" = browser;
+#       "audio/wav" = browser;
+#     };
+#
+#     # Note: associations.added requires a list of strings
+#     associations.added = {
+#       "x-scheme-handler/http" = [ browser ];
+#       "x-scheme-handler/https" = [ browser ];
+#       "x-scheme-handler/chrome" = [ browser ];
+#       "text/html" = [ browser ];
+#       "application/x-extension-htm" = [ browser ];
+#       "application/x-extension-html" = [ browser ];
+#       "application/x-extension-shtml" = [ browser ];
+#       "application/xhtml+xml" = [ browser ];
+#       "application/x-extension-xhtml" = [ browser ];
+#       "application/x-extension-xht" = [ browser ];
+#     };
+#   };
+# }
