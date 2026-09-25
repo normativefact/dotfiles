@@ -18,8 +18,10 @@
 ./llm.nix
 
 ./mime.nix
-    ./productivity/sioyek.nix
 
+    ./productivity/sioyek.nix
+    ./productivity/ticktick.nix
+    
 ./services/activitywatch.nix
     ./services/cliphist.nix
 ./services/ssh-agent.nix

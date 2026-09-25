@@ -13,7 +13,10 @@
       corfu
       which-key
       magit
-catppuccin-theme
+      catppuccin-theme
+      org-roam
+      emacsql
+      emacsql-sqlite
 
     ];
   };
@@ -22,4 +25,7 @@ catppuccin-theme
     enable = true;
     client.enable = true;
   };
+    environment.systemPackages = with pkgs; [
+    sqlite
+  ];
 }
