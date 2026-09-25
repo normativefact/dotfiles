@@ -16,7 +16,7 @@
       catppuccin-theme
       org-roam
       emacsql
-      emacsql-sqlite
+
 
     ];
   };
@@ -25,7 +25,5 @@
     enable = true;
     client.enable = true;
   };
-    environment.systemPackages = with pkgs; [
-    sqlite
-  ];
+
 }

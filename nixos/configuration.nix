@@ -133,6 +133,7 @@ pup
     rclone
     zola
     home-manager
+    sqlite
 
     slurp
     helix
