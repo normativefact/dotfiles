@@ -10,8 +10,9 @@ let
     { cmd = "sioyek --new-instance --execute-command open_last_document"; workspace = 1; }
     { cmd = "kitty -e nvim ~/notes/"; workspace = 1; }
     # { cmd = "kitty -e zzola"; workspace = 1; }
-    { cmd = "kitty --class scratchpad -e nvim ~/notes/scratchpad.md"; workspace = "special:scratchpad"; }
+    { cmd = "emacsclient -c"; workspace = "special:scratchpad"; }
     { cmd = "bash -c wl-paste --type text --watch cliphist store & wl-paste --type image --watch cliphist store -max-items 300"; }
+    { cmd = "ticktick"; workspace = "special:scratchpad"; }
   ];
 
   # Nix compiler: translates Nix attrsets -> Lua hl.exec_cmd calls
