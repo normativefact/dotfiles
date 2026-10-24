@@ -50,8 +50,7 @@
       wheel_scroll_multiplier = "3.0";
 
       # Remote Control / Daemon
-      allow_remote_control = true;
-      listen_on = "unix:@mykitty";
+      allow_remote_control = false;
 
     };
 

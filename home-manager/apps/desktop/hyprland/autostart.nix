@@ -3,7 +3,7 @@
 let
   # Pure declarative Nix data
   autostartList = [
-    { cmd = "swaybg -i ~/Downloads/wallpapers/mountain-dark.jpg"; }
+    { cmd = "swaybg -i ${../walls/mountain-dark.jpg}"; }
     { cmd = "bash -c waybar"; }
     { cmd = "dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE"; }
     { cmd = "zen-beta"; workspace = 2; }

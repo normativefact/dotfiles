@@ -5,7 +5,7 @@
 }: let
   mainMod = "SUPER";
   terminal = "kitty";
-  fileManager = "yazi";
+  fileManager = "kitty -e yazi";
   menu = "fuzzel";
 
   # -------------------------------------------------------------
@@ -121,7 +121,7 @@
     # Screenshots
     {
       key = "SHIFT + Print";
-      exec = ''grim -g "$(slurp -d)" - | satty -f - --copy-command wl-copy -o "~/Pictures/Screenshots/%Y%m%d_%H%M%S.png"'';
+      exec = ''grim -g "$(slurp -d)" - | satty -f - --copy-command wl-copy -o "$HOME/Pictures/Screenshots/%Y%m%d_%H%M%S.png"'';
     }
     {
       key = "Print";

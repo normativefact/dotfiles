@@ -1,11 +1,13 @@
 { pkgs, ... }:
 
 {
+  programs.delta = {
+    enable = true;
+    enableGitIntegration = true;
+  };
+
   programs.git = {
     enable = true;
-    userName = "normativefact";
-    userEmail = "311160822+normativefact@users.noreply.github.com";
-
     package = pkgs.symlinkJoin {
       name = "git-wrapped";
       paths = [ pkgs.git ];
@@ -20,7 +22,9 @@
       signByDefault = true;
     };
 
-    extraConfig = {
+    settings = {
+      user.name = "normativefact";
+      user.email = "311160822+normativefact@users.noreply.github.com";
       init.defaultBranch = "main";
       gpg.format = "ssh";
 
@@ -29,8 +33,6 @@
       commit.verbose = true;
       diff.algorithm = "histogram";
     };
-
-    delta.enable = true;
 
     ignores = [
       ".DS_Store"

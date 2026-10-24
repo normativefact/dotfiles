@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ pkgs, ... }:
 
 {
   home.packages = with pkgs; [
@@ -6,8 +6,9 @@
     gnumake
     nodejs
     tree-sitter
-python3Packages.pylatexenc
+    python3Packages.pylatexenc
   ];
 
-  home.file.".config/nvim".source = config.lib.file.mkOutOfStoreSymlink "/home/normativefact/dotfiles/nvim/.config/nvim";
+  # Install Neovim without linking to a configuration absent from the repository.
+  programs.neovim.enable = true;
 }

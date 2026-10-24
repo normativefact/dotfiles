@@ -8,11 +8,10 @@
   imports = [
     ./hardware-configuration.nix
     ./modules/keyd.nix
-    ./modules/graphics.nix
 
     ./modules/emacs.nix
     ./modules/nix-ld.nix
-  ];
+  ] ++ lib.optional (builtins.pathExists ./local.nix) ./local.nix;
 
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
@@ -56,6 +55,18 @@ security.pki.caCertificateBlacklist = [
   "emSign ECC Root CA - G3"
 ];
   
+  # Wayland Espanso needs a privileged wrapper; Home Manager owns its config
+  # and user service. This mirrors the NixOS Espanso module's wrapper.
+  security.wrappers.espanso = {
+    capabilities = "cap_dac_override+p";
+    owner = "root";
+    group = "root";
+    source = lib.getExe (pkgs.espanso-wayland.override {
+      securityWrapperPath = config.security.wrapperDir;
+    });
+  };
+
+  programs.hyprlock.enable = true;
   services.input-remapper.enable = true;
   programs.ydotool.enable = true;
   # services.ydotoold.enable = true;
@@ -84,7 +95,6 @@ security.pki.caCertificateBlacklist = [
 pup
       paperlib
       rucola
-      espanso
       trash-cli
       keymapp
       dust
@@ -143,21 +153,20 @@ pup
 
     slurp
     helix
-    espanso-wayland
     evtest
     keyd
     piper
     cliphist
     wl-clipboard
     hyprpolkitagent
-    inputs.zen-browser.packages."${pkgs.system}".default
+    inputs.zen-browser.packages."${pkgs.stdenv.hostPlatform.system}".default
   ];
 
   programs.hyprland = {
     enable = true;
     xwayland.enable = true;
-    package = inputs.hyprland.packages.${pkgs.system}.hyprland;
-    portalPackage = inputs.hyprland.packages.${pkgs.system}.xdg-desktop-portal-hyprland;
+    package = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.hyprland;
+    portalPackage = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.xdg-desktop-portal-hyprland;
   };
 
   nix.settings = {

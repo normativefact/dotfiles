@@ -1,7 +1,9 @@
 { pkgs, lib, ... }: {
   services.espanso = {
     enable = true;
-    package = pkgs.espanso-wayland;
+    x11Support = false;
+    waylandSupport = true;
+    package-wayland = pkgs.espanso-wayland;
 
     configs = {
       default = {
@@ -59,7 +61,7 @@
                 name = "result";
                 type = "shell";
                 params = {
-                  cmd = "echo \"scale=4; {{expr}}\" | bc -l | sed -E 's/\\.?0+$//'";
+                  cmd = "echo \"scale=4; {{expr}}\" | bc -l | sed -E '/\\./ { s/0+$//; s/\\.$//; }'";
                 };
               }
             ];
@@ -105,6 +107,11 @@
     };
   };
 
-  # Point the systemd unit to the capability wrapper
+  # Dependencies used by shell expansions must be available to the service.
+  systemd.user.services.espanso.Service.Environment = [
+    "PATH=${lib.makeBinPath [ pkgs.bash pkgs.bc pkgs.coreutils pkgs.curl pkgs.gnused ]}"
+  ];
+
+  # The wrapper is declared in nixos/configuration.nix.
   systemd.user.services.espanso.Service.ExecStart = lib.mkForce "/run/wrappers/bin/espanso daemon";
 }
