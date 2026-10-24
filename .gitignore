@@ -1,0 +1,11 @@
+home-manager/local.nix
+flaek
+result
+result-*
+
+# Machine-specific settings and editor recovery files
+/nixos/hardware-configuration.nix
+/nixos/local.nix
+*.swp
+*.swo
+*~
