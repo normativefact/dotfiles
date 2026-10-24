@@ -1,4 +1,4 @@
-{pkgs, ...}:
+{config, pkgs, ...}:
 
 let
                     
@@ -117,6 +117,16 @@ pomodoro-toggle = pkgs.writeShellScriptBin "waybar-pomodoro-toggle" ''
 in
 
 {
+  # Keep common widgets, but use Niri's IPC modules in a Niri session.
+  xdg.configFile."waybar/niri.json".source = (pkgs.formats.json {}).generate "waybar-niri.json" {
+    mainBar = (builtins.removeAttrs config.programs.waybar.settings.mainBar [
+      "hyprland/workspaces" "hyprland/submap" "hyprland/window"
+    ]) // {
+      modules-left = [ "niri/workspaces" "custom/pomodoro" ];
+      modules-center = [ "niri/window" ];
+    };
+  };
+
   stylix.targets.waybar.enable = false;
 
   programs.waybar = {

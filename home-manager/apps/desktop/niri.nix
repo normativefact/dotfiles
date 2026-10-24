@@ -54,6 +54,14 @@ in
     package = pkgs.niri;
 
     settings = {
+      # Named workspaces must be declared in the generated Niri configuration.
+      workspaces = {
+        learning = {};
+        browser = {};
+        others = {};
+        scratchpad = {};
+      };
+
       # ---------------------------------------------------------
       # Environment & Startup Daemons
       # ---------------------------------------------------------
@@ -64,8 +72,8 @@ in
       };
 
       spawn-at-startup = [
-        { command = [ "swaybg" "-i" "${config.home.homeDirectory}/Downloads/wallpapers/mountain-dark.jpg" ]; }
-        { command = [ "waybar" ]; }
+        { command = [ "swaybg" "-i" "${./walls/mountain-dark.jpg}" ]; }
+        { command = [ "waybar" "--config" "${config.xdg.configHome}/waybar/niri.json" ]; }
         { command = [ "dbus-update-activation-environment" "--systemd" "WAYLAND_DISPLAY" "XDG_CURRENT_DESKTOP=niri" ]; }
         { command = [ "wl-paste" "--type" "text" "--watch" "cliphist" "store" ]; }
         { command = [ "wl-paste" "--type" "image" "--watch" "cliphist" "store" "-max-items" "300" ]; }
@@ -223,7 +231,7 @@ in
         {
           # Launchers
           "${mod}+T".action.spawn = [ "kitty" ];
-          "${mod}+E".action.spawn = [ "yazi" ];
+          "${mod}+E".action.spawn = [ "kitty" "-e" "yazi" ];
           "${mod}+R".action.spawn = [ "fuzzel" ];
           "${mod}+V".action.spawn = [ "sh" "-c" "cliphist list | fuzzel -dmenu | cliphist decode | wl-copy" ];
           "${mod}+B".action.spawn = [ "kitty" "--class" "scratchpad" "-e" "nvim" "${config.home.homeDirectory}/notes/scratchpad.md" ];

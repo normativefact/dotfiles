@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ inputs, pkgs, ... }:
 
 {
   imports = [
@@ -11,11 +11,15 @@
   ];
 
   programs.hyprlock.enable = true;
-  # security.pam.services.hyprlock = {};
 
   wayland.windowManager.hyprland = {
     enable = true;
+    configType = "lua";
     xwayland.enable = true;
+    # NixOS owns the compositor. Reuse its portal without Home Manager's
+    # compositor override, which the upstream portal no longer accepts.
+    package = null;
+    portalPackage = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.xdg-desktop-portal-hyprland;
   };
 
   # Required companion tools

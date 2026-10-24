@@ -9,5 +9,5 @@ nix.gc = {
   options = "--delete-older-than 14d";
 };
 
-imports = [./apps];
+imports = [./apps] ++ lib.optional (builtins.pathExists ./local.nix) ./local.nix;
 }
