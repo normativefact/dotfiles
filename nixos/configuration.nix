@@ -123,7 +123,6 @@ pup
       fd
       anki-bin
       stow
-      codex
     ];
   };
 
