@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Resolve the checkout, rather than depending on the caller's working directory.
+repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+
+case "${1:-}" in
+  system)
+    shift
+    action=${1:-switch}
+    if (($#)); then shift; fi
+    exec nixos-rebuild "$action" --flake "path:$repo_dir#nixos" "$@"
+    ;;
+  home)
+    shift
+    action=${1:-switch}
+    if (($#)); then shift; fi
+    exec home-manager "$action" --flake "path:$repo_dir#normativefact" "$@"
+    ;;
+  *)
+    echo "Usage: $0 {system|home} [action] [extra arguments...]" >&2
+    exit 2
+    ;;
+esac

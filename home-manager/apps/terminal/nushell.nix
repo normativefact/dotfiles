@@ -16,7 +16,7 @@
       copy = "wl-copy";
 
       edit   = "${config.home.homeDirectory}/config.sh";
-      hms    = "home-manager switch --flake path:.";
+      hms    = "./rebuild home";
       znix   = "zellij --layout nixconf attach -c nixconf";
       zhypr  = "zellij --layout zhypr attach -c hyprconf";
       znvim  = "zellij --layout nvimconf attach -c nvimconf";

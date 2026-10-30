@@ -33,27 +33,31 @@ Optional personal overrides can go in the ignored `home-manager/local.nix`.
 The repository installs Neovim but does not supply a Neovim configuration;
 manage your existing configuration independently or add it declaratively.
 
-**Use `path:` when applying these configurations.** Git-backed flakes exclude
-ignored hardware and local override files. A path flake includes those files
-without committing them. Keep credentials outside the checkout and Nix
-expressions: path flakes copy their source into the Nix store.
+Use the `rebuild` helper below: it automatically includes ignored and untracked
+files from this checkout, without staging or committing them. Keep credentials
+outside the checkout and Nix expressions, since the source is copied into the
+Nix store. Ordinary Git-backed flake commands still exclude ignored files;
+the helper handles this distinction for you.
 
 ## Validate and apply
 
 From the repository root, with Nix flakes enabled:
 
 ```sh
-nix eval --no-write-lock-file --raw "path:$PWD#nixosConfigurations.nixos.config.system.build.toplevel.drvPath"
-nix eval --no-write-lock-file --raw "path:$PWD#homeConfigurations.normativefact.activationPackage.drvPath"
-
 # Build first; this does not activate the configuration.
-nix build --no-write-lock-file --no-link "path:$PWD#nixosConfigurations.nixos.config.system.build.toplevel"
-nix build --no-write-lock-file --no-link "path:$PWD#homeConfigurations.normativefact.activationPackage"
+./rebuild system build
+./rebuild home build
 
 # Apply only on the intended NixOS machine and user account.
-sudo nixos-rebuild switch --flake "path:$PWD#nixos"
-home-manager switch --flake "path:$PWD#normativefact"
+sudo ./rebuild system
+./rebuild home
 ```
+
+The action defaults to `switch`. Additional arguments are passed to the
+underlying command, for example `./rebuild home build --show-trace`.
+The `hms` Nushell alias runs `./rebuild home` from the repository root.
+You can also invoke the helper by its absolute path from another directory;
+it always uses the checkout containing the helper.
 
 Apply the system configuration before Home Manager on a new machine. Espanso's
 Wayland service depends on the system capability wrapper, and Hyprlock depends
