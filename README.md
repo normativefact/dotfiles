@@ -72,10 +72,5 @@ provided by this repository.
 Hyprland and Niri can both be installed. Niri starts Waybar with its separate
 `waybar/niri.json` configuration; Hyprland uses the default configuration.
 
-## Aider dependency compatibility
 
-Aider uses the separately locked `nixpkgs-aider` input (NixOS 26.05). The main
-nixpkgs input remains unstable. This avoids the unstable PostHog/MCP dependency
-regression without allowing broken packages. To refresh only that package set,
-run `nix flake update nixpkgs-aider`. Remove this separate input once Aider's
-unstable dependency closure works again.
+Codex CLI and Bubblewrap (`bwrap`) are installed through Home Manager.
