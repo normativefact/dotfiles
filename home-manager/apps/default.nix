@@ -14,6 +14,7 @@
     ./mime.nix
     ./productivity/sioyek.nix
     ./productivity/ticktick.nix
+    ./productivity/excalidraw.nix
     ./services/activitywatch.nix
     ./services/cliphist.nix
     ./services/git.nix

@@ -2,6 +2,7 @@
 
 {
   home.packages = with pkgs; [
+    neovim
     gcc
     gnumake
     nodejs
@@ -9,10 +10,12 @@
     python3Packages.pylatexenc
   ];
 
-  # Install Neovim without linking to a configuration absent from the repository.
-  programs.neovim = {
-    enable = true;
-    defaultEditor = true;
+  # Install the editor, but leave ~/.config/nvim entirely user-managed.
+  # Enabling the Neovim module or its Stylix target generates init.lua.
+  stylix.targets.neovim.enable = false;
+  home.sessionVariables = {
+    EDITOR = "nvim";
+    VISUAL = "nvim";
   };
 
   # Nushell does not source Home Manager's POSIX session-variable script.
