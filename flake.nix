@@ -4,6 +4,9 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+    # Keep Aider's Python dependency closure off unstable while PostHog is broken.
+    nixpkgs-aider.url = "github:NixOS/nixpkgs/nixos-26.05";
+
     hyprland = {
       url = "github:hyprwm/Hyprland";
       inputs.nixpkgs.follows = "nixpkgs";

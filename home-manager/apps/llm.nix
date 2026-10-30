@@ -1,9 +1,9 @@
-{ pkgs, ... }:
+{ inputs, pkgs, ... }:
 
 {
   # 1. AI Tooling Packages
   home.packages = with pkgs; [
-    aider-chat
+    inputs.nixpkgs-aider.legacyPackages.${pkgs.stdenv.hostPlatform.system}.aider-chat
     mods
     wl-clipboard
     jq
