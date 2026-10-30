@@ -1,7 +1,23 @@
-{ pkgs, ... }: {
-  home.packages = with pkgs; [
+{ pkgs, ... }:
+let
+  # aw-core 0.5.17 requires peewee==3.*. Keep this compatibility override
+  # local to ActivityWatch; do not relax its runtime dependency checks.
+  activitywatchPkgs = pkgs.extend (_: prev:
+    let
+      python = prev.python3.override {
+        packageOverrides = pyFinal: pyPrev: {
+          aw-core = pyPrev.aw-core.override { peewee = pyFinal.peewee_3; };
+        };
+      };
+    in {
+      python3 = python;
+      python3Packages = python.pkgs;
+    });
+  activitywatch = activitywatchPkgs.activitywatch;
+in {
+  home.packages = [
     activitywatch
-    awatcher
+    pkgs.awatcher
   ];
 
   systemd.user.startServices = "sd-switch";
@@ -14,7 +30,7 @@
       PartOf = [ "graphical-session.target" ];
     };
     Service = {
-      ExecStart = "${pkgs.activitywatch}/bin/aw-server";
+      ExecStart = "${activitywatch}/bin/aw-server";
       Restart = "on-failure";
     };
     Install = {
