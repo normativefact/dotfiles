@@ -4,8 +4,8 @@ result
 result-*
 
 # Machine-specific settings and editor recovery files
-/nixos/hardware-configuration.nix
 /nixos/local.nix
+/nixos/hardware-configuration.nix
 *.swp
 *.swo
 *~
