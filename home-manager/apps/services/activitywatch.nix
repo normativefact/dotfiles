@@ -12,6 +12,13 @@ let
     in {
       python3 = python;
       python3Packages = python.pkgs;
+      # makeBinaryWrapper requires separate argument tokens. Upstream aw-qt
+      # passes the entire --suffix option as one string, which fails in fixup.
+      aw-qt = prev.aw-qt.overrideAttrs (_: {
+        makeWrapperArgs = [
+          "--suffix" "PATH" ":" (prev.lib.makeBinPath [ prev.xdg-utils ])
+        ];
+      });
     });
   activitywatch = activitywatchPkgs.activitywatch;
 in {
