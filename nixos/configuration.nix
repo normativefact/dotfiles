@@ -50,10 +50,11 @@
     displayManager = {ly.enable = true;};
   };
 
-security.pki.caCertificateBlacklist = [
-  "Comodo AAA Services root"
-  "emSign ECC Root CA - G3"
-];
+  # Entries must exist in the selected NSS certificate bundle. emSign ECC
+  # Root CA - G3 is already absent; listing it here makes nss-cacert fail.
+  security.pki.caCertificateBlacklist = [
+    "Comodo AAA Services root"
+  ];
   
   # Wayland Espanso needs a privileged wrapper; Home Manager owns its config
   # and user service. This mirrors the NixOS Espanso module's wrapper.
