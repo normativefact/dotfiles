@@ -19,7 +19,7 @@
 
     signing = {
       key = "~/.ssh/id_ed25519.pub";
-      signByDefault = true;
+      signByDefault = false;
     };
 
     settings = {
