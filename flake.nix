@@ -40,17 +40,66 @@
     nixpkgs,
     home-manager,
     ...
-  } @ inputs: {
+  } @ inputs: let
+    system = "x86_64-linux";
+    antigravityOverlay = final: prev: {
+      antigravity-cli = prev.stdenv.mkDerivation rec {
+        pname = "google-antigravity-cli";
+        version = "1.4.12-4768735748292608";
+
+        src = prev.fetchurl {
+          url = "https://storage.googleapis.com/antigravity-public/antigravity-cli/${version}/linux-x64/cli_linux_x64.tar.gz";
+          hash = "sha512-6gHHO3chh7ypKIUs+WI18NhG1tpevawYi5rnGVl0ZXN/MlVA1IPuXz9i0VECkAFxM0SXKhh937mMx7l/cgS39A==";
+        };
+
+        nativeBuildInputs = [
+          prev.autoPatchelfHook
+        ];
+
+        sourceRoot = ".";
+
+        installPhase = ''
+          runHook preInstall
+
+          mkdir -p $out/bin
+          cp antigravity $out/bin/agy
+          ln -s $out/bin/agy $out/bin/antigravity
+
+          runHook postInstall
+        '';
+
+        meta = {
+          description = "Google Antigravity CLI";
+          homepage = "https://antigravity.google";
+          mainProgram = "agy";
+        };
+      };
+    };
+
+    pkgs = import nixpkgs {
+      inherit system;
+      config.allowUnfree = true;
+      overlays = [ antigravityOverlay ];
+    };
+  in {
+    packages.${system} = {
+      antigravity-cli = pkgs.antigravity-cli;
+      default = pkgs.antigravity-cli;
+    };
+
+    overlays.default = antigravityOverlay;
+
     nixosConfigurations.nixos = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
+      inherit system;
       specialArgs = { inherit inputs; };
       modules = [
+        { nixpkgs.overlays = [ antigravityOverlay ]; }
         ./nixos/configuration.nix
       ];
     };
 
     homeConfigurations.normativefact = home-manager.lib.homeManagerConfiguration {
-      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+      inherit pkgs;
       extraSpecialArgs = { inherit inputs; };
       modules = [
         ./home-manager/home.nix
