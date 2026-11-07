@@ -15,6 +15,7 @@
     ./productivity/sioyek.nix
     ./productivity/ticktick.nix
     ./productivity/excalidraw.nix
+    ./services/notes-dashboard.nix
     ./services/activitywatch.nix
     ./services/cliphist.nix
     ./services/git.nix
