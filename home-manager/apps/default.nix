@@ -5,6 +5,7 @@
     ./desktop/stylix.nix
     ./desktop/waybar.nix
     ./desktop/discord.nix
+    ./desktop/horizon.nix
     ./desktop/hyprland/default.nix
     ./editor/nvim.nix
     ./editor/espanso.nix
