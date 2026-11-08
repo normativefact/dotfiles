@@ -56,6 +56,7 @@
       zellij.enable = true;
       gtk.enable = true;
       fuzzel.enable = true;
+      rofi.enable = false;
       starship.enable = true;
       sioyek.enable = true;
       emacs.enable = false;

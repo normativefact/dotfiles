@@ -1,6 +1,10 @@
 { pkgs, ... }:
 
 {
+  # Stata may still require GTK 2 at runtime. Keep this exception limited to
+  # GTK 2 until the installed Stata version can use a supported toolkit.
+  nixpkgs.config.problems.handlers."gtk+".broken = "warn";
+
   # Enable the core nix-ld linker system-wide
   programs.nix-ld.enable = true;
 
