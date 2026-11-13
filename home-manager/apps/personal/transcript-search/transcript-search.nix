@@ -13,7 +13,7 @@ let
 in {
   home.packages = [ search ];
   xdg.desktopEntries.transcript-search = {
-    name = "Transcript Search";
+    name = "iCS Transcript Search";
     comment = "Search transcripts and open videos at matching timestamps";
     exec = "${lib.getExe pkgs.kitty} -e ${lib.getExe search}";
     icon = "system-search";
