@@ -28,5 +28,6 @@
     ./terminal/zellij.nix
     ./terminal/7z.nix
     ./video/1-default.nix
+    ./personal/default.nix
   ];
 }
