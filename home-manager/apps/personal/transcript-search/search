@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+import base64
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+
+ROOT = Path(os.environ.get('TRANSCRIPT_ROOT', Path(__file__).resolve().parent.parent)).expanduser().resolve()
+VIDEO_ROOT = Path(os.environ.get('VIDEO_ROOT', Path.home() / 'ics-video-original')).expanduser().resolve()
+SCRIPT = shlex.join([sys.executable, str(Path(__file__).resolve())])
+EXCLUDES = ['excerpts/**', 'ledger_tools/**', 'research_index*/**', 'vidinspector/**']
+
+
+def query(term):
+    if not term:
+        return
+    args = ['rg', '--json', '--smart-case', '--glob', '*.txt']
+    for pattern in EXCLUDES:
+        args += ['--glob', '!' + pattern]
+    args += ['--', term, '.']
+    proc = subprocess.Popen(args, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        for raw in proc.stdout:
+            event = json.loads(raw)
+            if event['type'] != 'match':
+                continue
+            data = event['data']
+            path = data['path'].get('text')
+            content = data['lines'].get('text')
+            if path is None or content is None:
+                continue
+            token = base64.urlsafe_b64encode(os.fsencode(path)).decode()
+            display = path.replace('\t', ' ').replace('\n', ' ')
+            content = content.rstrip('\r\n').replace('\t', ' ')
+            print(f"{token}\t{data['line_number']}\t{display}:{data['line_number']}: {content}", flush=True)
+    except BrokenPipeError:
+        proc.kill()
+    finally:
+        proc.stdout.close()
+        proc.wait()
+
+
+def parse(row):
+    token, line, _ = row.split('\t', 2)
+    path = (ROOT / os.fsdecode(base64.urlsafe_b64decode(token))).resolve()
+    if not path.is_relative_to(ROOT) or not line.isdecimal():
+        raise ValueError('Invalid result')
+    return path, int(line)
+
+
+def preview(row):
+    try:
+        path, line = parse(row)
+        with path.open(encoding='utf-8', errors='replace') as f:
+            for n, text in enumerate(f, 1):
+                if n > line + 4:
+                    break
+                if n >= line - 4:
+                    print(text, end='')
+    except (OSError, ValueError, IndexError):
+        pass
+
+
+def fail(message):
+    print(message, file=sys.stderr)
+    if sys.stdin.isatty():
+        input('Press Enter to close.')
+    sys.exit(1)
+
+
+def main():
+    if len(sys.argv) == 3 and sys.argv[1] == '--query':
+        query(sys.argv[2]); return
+    if len(sys.argv) == 3 and sys.argv[1] == '--preview':
+        preview(sys.argv[2]); return
+    if not ROOT.is_dir():
+        fail(f'Transcript directory not found: {ROOT}')
+    if not shutil.which('rg') or not shutil.which('fzf'):
+        fail('Transcript Search requires rg and fzf.')
+    env = dict(os.environ, TRANSCRIPT_ROOT=str(ROOT), VIDEO_ROOT=str(VIDEO_ROOT), FZF_DEFAULT_COMMAND='')
+    result = subprocess.run(['fzf', '--disabled', '--delimiter=\t', '--with-nth=3..',
+        '--prompt=Search transcripts> ', '--header=Enter: MPV  |  Ctrl-O: open with  |  Esc: quit',
+        '--bind', f'change:reload:{SCRIPT} --query {{q}}',
+        '--preview', f'{SCRIPT} --preview {{}}', '--preview-window=down,40%,wrap',
+        '--expect=ctrl-o'], stdout=subprocess.PIPE, text=True, env=env)
+    if result.returncode or not result.stdout:
+        return
+    key, _, row = result.stdout.partition('\n')
+    try:
+        path, line = parse(row.rstrip('\n'))
+        with path.open(encoding='utf-8', errors='replace') as f:
+            selected = next(text for n, text in enumerate(f, 1) if n == line)
+        match = re.match(r'^\[(\d+):(\d{2}):(\d{2})(?:[.,](\d+))?\]', selected)
+        if not match or int(match[2]) >= 60 or int(match[3]) >= 60:
+            fail('The selected line has no recognizable timestamp.')
+        seconds = int(match[1]) * 3600 + int(match[2]) * 60 + int(match[3])
+        stamp = str(seconds) + ('.' + match[4] if match[4] else '')
+        video = VIDEO_ROOT / path.relative_to(ROOT).with_suffix('.mp4')
+        if not video.is_file():
+            fail(f'Video not found: {video}')
+    except (OSError, ValueError, StopIteration) as e:
+        fail(f'Could not read the selected result: {e}')
+    choice = 'MPV'
+    if key == 'ctrl-o':
+        chooser = subprocess.run(['fzf', '--prompt=Open with> ', '--header=Enter: choose  |  Esc: cancel'],
+            input='MPV\nZen Browser\n', stdout=subprocess.PIPE, text=True, env=env)
+        if chooser.returncode:
+            return
+        choice = chooser.stdout.strip()
+    if choice == 'MPV':
+        command = [os.environ.get('MPV_BIN', 'mpv'), '--start=' + stamp, '--', str(video)]
+    elif choice == 'Zen Browser':
+        command = [os.environ.get('BROWSER_BIN', 'zen-beta'), video.as_uri() + '#t=' + stamp]
+    else:
+        return
+    try:
+        subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError as e:
+        fail(f'Could not launch {choice}: {e}')
+
+
+if __name__ == '__main__':
+    main()

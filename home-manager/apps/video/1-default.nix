@@ -6,5 +6,6 @@
     ./ffmpeg.nix
     ./obs.nix
     ./audio.nix
+    ./mpv.nix
   ];
 }
