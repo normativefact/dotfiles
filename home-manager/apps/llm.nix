@@ -71,6 +71,7 @@ in
 {
   home.packages = with pkgs; [
     codex
+    chatgpt
     antigravity-cli
     bubblewrap
     wl-clipboard
