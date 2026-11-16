@@ -2,9 +2,12 @@ import contextlib
 import importlib.machinery
 import importlib.util
 import io
+import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 
 loader = importlib.machinery.SourceFileLoader('transcript_search', str(Path(__file__).resolve().parents[1] / 'search'))
@@ -74,8 +77,61 @@ class RegexSearchTests(unittest.TestCase):
 
     def test_empty_and_no_matches(self):
         self.assertEqual(self.run_query('')[1], [])
-        self.assertEqual(self.run_query('nonexistent'), ('No matches', []))
+        self.assertEqual(self.run_query('nonexistent'), ('No matches | Scope: all directories', []))
         self.assertEqual(self.run_query('//g')[1], [1, 2, 3, 4, 5, 6])
+
+    def test_literal_text_does_not_parse_regex(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            search.query('path/to', literal=True)
+        self.assertIn('echo echo and', output.getvalue())
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            search.query('/memory/gi', literal=True)
+        self.assertIn('No matches', output.getvalue())
+
+    def test_scope_and_action_preserve_query_safely(self):
+        (search.ROOT / 'nested').mkdir()
+        (search.ROOT / 'nested' / 'other.txt').write_text('[00:00:01] memory\n')
+        filename = search.ROOT / 'session.json'
+        filename.write_text(json.dumps({'mode': 'regex', 'directories': ['nested']}))
+        with mock.patch.dict(os.environ, TRANSCRIPT_SESSION=str(filename)):
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                search.query('memory')
+            rows = output.getvalue().splitlines()
+            self.assertIn('Scope: nested', rows[0])
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(search.parse(rows[1])[0], search.ROOT / 'nested' / 'other.txt')
+            expression = r'foo)+abort+reload(echo BAD)'
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                search.action('literal', expression)
+            self.assertNotIn(expression, output.getvalue())
+            self.assertEqual(json.loads(filename.read_text())['query'], expression)
+            self.assertEqual(json.loads(filename.read_text())['directories'], ['nested'])
+
+    def test_unicode_highlighting_and_multiline_preview(self):
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            search.query('/café/u')
+        self.assertIn('\033[1;33mcafé\033[0m', output.getvalue())
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            search.query('/first.*second/s')
+        row = output.getvalue().splitlines()[1]
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            search.preview(row, '/first.*second/s')
+        self.assertIn('\033[1;33mfirst\033[0m', output.getvalue())
+        self.assertIn('\033[1;33m[00:00:06] second\033[0m', output.getvalue())
+
+    def test_directory_union_omits_redundant_children_and_excluded_folders(self):
+        for directory in ('course/part', 'other'):
+            (search.ROOT / directory).mkdir(parents=True)
+            (search.ROOT / directory / 'lecture.txt').write_text('[00:00:01] memory\n')
+        selections = [base64_token + '\tlabel' for base64_token in (
+            search.base64.urlsafe_b64encode(os.fsencode(path)).decode()
+            for path in ('course', 'course/part', 'other'))]
+        with mock.patch.object(search, 'picker', return_value=selections) as picker:
+            self.assertEqual(search.directory_picker(), ['course', 'other'])
+        labels = '\n'.join(picker.call_args.args[0])
+        self.assertNotIn('\texcerpts', labels)
+        self.assertIn('\tcourse/part', labels)
 
 
 if __name__ == '__main__':

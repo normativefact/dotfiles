@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import base64
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -15,11 +17,96 @@ VIDEO_ROOT = Path(os.environ.get('VIDEO_ROOT', Path.home() / 'ics-video-original
 SCRIPT = shlex.join([sys.executable, str(Path(__file__).resolve())])
 EXCLUDES = ['excerpts/**', 'ledger_tools/**', 'research_index*/**', 'vidinspector/**']
 REGEX_HELP = r'PCRE2: pattern or /pattern/gimsux | lookarounds, backreferences, \n | bare patterns: smart case'
+EDIT_BINDINGS = 'ctrl-k:kill-line,ctrl-y:yank,ctrl-u:unix-line-discard,ctrl-w:unix-word-rubout,ctrl-a:beginning-of-line,ctrl-e:end-of-line,ctrl-b:backward-char,ctrl-f:forward-char,alt-b:backward-word,alt-f:forward-word,alt-d:kill-word,alt-backspace:backward-kill-word,ctrl-n:down,ctrl-p:up,alt-<:first,alt->:last'
+COMMANDS = [
+    ('regex', 'C-t', 'Search transcripts with PCRE2'),
+    ('literal', 'C-l', 'Search transcripts as literal text'),
+    ('concepts', 'C-r', 'Fuzzy search indexed concepts'),
+    ('directories', 'M-s', 'Choose search directories (multiple allowed)'),
+    ('all-directories', '', 'Search all directories'),
+    ('open', 'RET', 'Open selected timestamp in MPV'),
+    ('open-with', 'C-o', 'Choose a player for the selected timestamp'),
+    ('toggle-preview', 'M-v', 'Show or hide transcript preview'),
+    ('preview-page-up', 'M-p', 'Scroll transcript preview up'),
+    ('preview-page-down', 'M-n', 'Scroll transcript preview down'),
+    ('help', 'C-h', 'Show searchable key reference'),
+    ('quit', 'C-g / Esc', 'Quit'),
+    ('kill-line', 'C-k', 'Kill query from cursor to end'),
+    ('yank', 'C-y', 'Yank killed query text'),
+    ('unix-line-discard', 'C-u', 'Kill query from cursor to beginning'),
+    ('unix-word-rubout', 'C-w', 'Kill preceding whitespace-delimited word'),
+    ('backward-kill-word', 'M-DEL', 'Kill preceding word'),
+    ('kill-word', 'M-d', 'Kill following word'),
+    ('beginning-of-line', 'C-a', 'Move to beginning of query'),
+    ('end-of-line', 'C-e', 'Move to end of query'),
+    ('backward-char', 'C-b', 'Move backward a character'),
+    ('forward-char', 'C-f', 'Move forward a character'),
+    ('backward-word', 'M-b', 'Move backward a word'),
+    ('forward-word', 'M-f', 'Move forward a word'),
+    ('up', 'C-p', 'Previous result'),
+    ('down', 'C-n', 'Next result'),
+    ('first', 'M-<', 'First result'),
+    ('last', 'M->', 'Last result'),
+]
+
+
+def session():
+    filename = os.environ.get('TRANSCRIPT_SESSION')
+    return json.loads(Path(filename).read_text()) if filename else {'mode': 'regex', 'directories': ['.']}
+
+
+def save_session(state):
+    filename = Path(os.environ['TRANSCRIPT_SESSION'])
+    pending = filename.with_suffix('.new')
+    pending.write_text(json.dumps(state))
+    pending.replace(filename)
+
+
+def scopes():
+    return session()['directories']
+
+
+def in_scope(path):
+    resolved = (ROOT / path).resolve()
+    return resolved.is_relative_to(ROOT) and any(resolved.is_relative_to(ROOT / directory) for directory in scopes())
+
+
+def search_args(term, literal=False):
+    case_args, pattern = (['--smart-case', '--fixed-strings'], term) if literal else regex_args(term)
+    args = ['rg', '--no-config', '--json', '--multiline', *case_args, '--glob', '*.txt']
+    if not literal:
+        args.append('--pcre2')
+    for excluded in EXCLUDES:
+        args += ['--glob', '!' + excluded]
+    return args + ['--', pattern]
+
+
+def highlighted_lines(data):
+    """rg offsets are UTF-8 bytes, including for non-ASCII and multiline matches."""
+    position = 0
+    for raw in data['lines']['text'].splitlines(keepends=True):
+        full = raw.encode('utf-8')
+        encoded = full.rstrip(b'\r\n')
+        intervals = []
+        for match in data['submatches']:
+            start = max(0, match['start'] - position)
+            end = min(len(encoded), match['end'] - position)
+            if end > start:
+                intervals.append((start, end))
+        parts, cursor = [], 0
+        for start, end in intervals:
+            parts += [encoded[cursor:start].decode('utf-8'), '\033[1;33m', encoded[start:end].decode('utf-8'), '\033[0m']
+            cursor = end
+        parts.append(encoded[cursor:].decode('utf-8'))
+        yield ''.join(parts).rstrip('\r\n')
+        position += len(full)
 
 
 def status(message):
     # fzf applies --with-nth=3.. to header lines as well as result rows.
-    print('\t\t' + message, flush=True)
+    selected = scopes()
+    scope = 'all directories' if selected == ['.'] else ', '.join(selected)
+    print('\t\t' + message + ' | Scope: ' + scope.replace('\n', ' ').replace('\t', ' '), flush=True)
 
 
 def regex_args(term):
@@ -56,19 +143,16 @@ def regex_args(term):
     return ['--case-sensitive'], f'(?{options})' + term[1:closing]
 
 
-def query(term):
+def query(term, literal=False):
     if not term:
-        status(REGEX_HELP)
+        status('Literal text search | smart case' if literal else REGEX_HELP)
         return
     try:
-        case_args, pattern = regex_args(term)
+        args = search_args(term, literal)
     except ValueError as error:
         status(f'Regex error: {error}')
         return
-    args = ['rg', '--no-config', '--json', '--pcre2', '--multiline', *case_args, '--glob', '*.txt']
-    for excluded in EXCLUDES:
-        args += ['--glob', '!' + excluded]
-    args += ['--', pattern, '.']
+    args += ['./' + directory for directory in scopes()]
     errors = tempfile.TemporaryFile()
     proc = subprocess.Popen(args, cwd=ROOT, stdout=subprocess.PIPE, stderr=errors)
     header_shown = False
@@ -84,13 +168,13 @@ def query(term):
             if path is None or content is None:
                 continue
             if not header_shown:
-                status(REGEX_HELP)
+                status('Literal text search | smart case' if literal else REGEX_HELP)
                 header_shown = True
             token = base64.urlsafe_b64encode(os.fsencode(path)).decode()
             display = path.replace('\t', ' ').replace('\n', ' ')
             # A multiline JSON event can cover several timestamped lines.
             # Keep each line's original number for preview and video seeking.
-            for offset, text in enumerate(content.rstrip('\r\n').split('\n')):
+            for offset, text in enumerate(highlighted_lines(data)):
                 text = re.sub(r'^\[[^]]+\]\s*', '', text.rstrip('\r').replace('\t', ' '))
                 print(f"{token}\t{data['line_number'] + offset}\t{Path(display).stem} — {text}", flush=True)
     except BrokenPipeError:
@@ -107,12 +191,12 @@ def query(term):
 
 
 def concepts():
-    status('Fuzzy concept search | Ctrl-T: PCRE2 transcript search')
+    status('Fuzzy concept search | C-t: PCRE2 transcript search')
     for ledger in sorted((ROOT / 'ledgers' / '1-atomic').glob('*.json')):
         try:
             data = json.loads(ledger.read_text())
             path = Path(data['source_path']).with_suffix('.txt')
-            if data.get('is_removed') or not (ROOT / path).is_file():
+            if data.get('is_removed') or not in_scope(path) or not (ROOT / path).is_file():
                 continue
             lines = (ROOT / path).read_text(errors='replace').splitlines()
             for segment in data.get('segments', []):
@@ -135,15 +219,24 @@ def parse(row):
     return path, int(line)
 
 
-def preview(row):
+def preview(row, term=''):
     try:
         path, line = parse(row)
-        with path.open(encoding='utf-8', errors='replace') as f:
-            for n, text in enumerate(f, 1):
-                if n > line + 4:
-                    break
-                if n >= line - 4:
-                    print(text, end='')
+        highlights = {}
+        mode = session()['mode']
+        if term and mode != 'concepts':
+            result = subprocess.run(search_args(term, mode == 'literal') + [str(path)],
+                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+            for raw in result.stdout.splitlines():
+                event = json.loads(raw)
+                if event['type'] == 'match':
+                    data = event['data']
+                    if data['lines'].get('text') is not None:
+                        highlights.update((data['line_number'] + offset, text)
+                                          for offset, text in enumerate(highlighted_lines(data)))
+        for n, text in enumerate(path.read_text(encoding='utf-8', errors='replace').splitlines(), 1):
+            marker = '>' if n == line else ' '
+            print(f'{marker} {n:5}  {highlights.get(n, text)}')
     except (OSError, ValueError, IndexError):
         pass
 
@@ -155,55 +248,175 @@ def fail(message):
     sys.exit(1)
 
 
+def picker(items, prompt, header='', extra=()):
+    # Reserve stdout for selections and send the nested UI to the terminal.
+    with open('/dev/tty', 'w') as terminal:
+        result = subprocess.run(['fzf', '--layout=reverse', '--prompt=' + prompt, '--header=' + header,
+                                 '--bind', EDIT_BINDINGS, *extra],
+                                input='\n'.join(items) + '\n', stdout=subprocess.PIPE,
+                                stderr=terminal, text=True)
+    return result.stdout.rstrip('\n').splitlines() if result.returncode == 0 else None
+
+
+def directory_picker():
+    args = ['rg', '--no-config', '--files', '--null', '--glob', '*.txt']
+    for excluded in EXCLUDES:
+        args += ['--glob', '!' + excluded]
+    result = subprocess.run(args, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    directories = {'.'}
+    for filename in result.stdout.split(b'\0'):
+        if filename:
+            path = Path(os.fsdecode(filename)).parent
+            if in_scope_root(path):
+                directories.update(str(parent) for parent in (path, *path.parents))
+    ordered = ['.'] + sorted(directories - {'.'})
+    items = [base64.urlsafe_b64encode(os.fsencode(path)).decode() + '\t' +
+             ('All transcripts' if path == '.' else path.replace('\n', ' ').replace('\t', ' ')) for path in ordered]
+    selected = set(scopes())
+    initial = '+'.join(f'pos({index})+select' for index, path in enumerate(ordered, 1) if path in selected)
+    rows = picker(items, 'Directories> ', 'Tab: toggle (deselect All to narrow) | RET: apply | M-a: all | Esc: cancel',
+                  ['--multi', '--delimiter=\t', '--with-nth=2..', '--bind',
+                   f'load:{initial or "first"}+first', '--bind', 'alt-a:deselect-all+first+select+accept'])
+    if rows is None:
+        return None
+    paths = [os.fsdecode(base64.urlsafe_b64decode(row.split('\t')[0])) for row in rows]
+    # Parent selections subsume their children, avoiding duplicate rg results.
+    return [path for path in paths if not any(path != other and Path(path).is_relative_to(other) for other in paths)]
+
+
+def in_scope_root(path):
+    return (ROOT / path).resolve().is_relative_to(ROOT)
+
+
+def action(name, term, row=''):
+    if name == 'palette':
+        rows = picker([f'{command}\t{key or "M-x"}\t{description}' for command, key, description in COMMANDS],
+                      'M-x ', 'RET: run command | Esc: cancel', ['--delimiter=\t'])
+        if not rows:
+            return
+        name = rows[0].split('\t')[0]
+    state = session()
+    if name in ('regex', 'literal', 'concepts', 'directories', 'all-directories'):
+        if name == 'directories':
+            directories = directory_picker()
+            if directories is None:
+                return
+            state['directories'] = directories or ['.']
+        elif name == 'all-directories':
+            state['directories'] = ['.']
+        else:
+            state['mode'] = name
+        state['query'] = term
+        save_session(state)
+        mode = state['mode']
+        # The input remains untouched, so switching modes keeps the expression
+        # and cursor. Opening a video never exits this fzf process either.
+        search = 'unbind(change)+enable-search' if mode == 'concepts' else 'disable-search+rebind(change)'
+        print(f'{search}+change-prompt({mode.capitalize()}> )+reload({SCRIPT} --reload)+refresh-preview')
+    elif name in ('open', 'open-with'):
+        if row:
+            open_result(row, name == 'open-with')
+    elif name == 'help':
+        help_keys()
+    elif name == 'quit':
+        print('abort')
+    elif name in {command for command, _, _ in COMMANDS}:
+        print(name)
+
+
+def help_keys():
+    rows = [f'{key or "M-x":15} {command:22} {description}' for command, key, description in COMMANDS]
+    rows += ['', 'M-x             Search commands by name, description, or binding',
+             'Delete          Delete next character', 'S-Up / S-Down   Scroll preview one line']
+    picker(rows, 'Keys> ', 'Key reference | RET / Esc: return | Type to find a binding')
+
+
 def main():
-    while run_search():
-        pass
-
-
-def run_search():
     if len(sys.argv) == 2 and sys.argv[1] == '--concepts':
         concepts(); return
     if len(sys.argv) == 3 and sys.argv[1] == '--query':
         query(sys.argv[2]); return
-    if len(sys.argv) == 3 and sys.argv[1] == '--preview':
-        preview(sys.argv[2]); return
+    if len(sys.argv) == 3 and sys.argv[1] == '--results':
+        state = session()
+        if state['mode'] == 'concepts':
+            concepts()
+        else:
+            query(sys.argv[2], state['mode'] == 'literal')
+        return
+    if len(sys.argv) == 2 and sys.argv[1] == '--reload':
+        state = session()
+        if state['mode'] == 'concepts':
+            concepts()
+        else:
+            query(state.get('query', ''), state['mode'] == 'literal')
+        return
+    if len(sys.argv) in (3, 4) and sys.argv[1] == '--preview':
+        preview(sys.argv[-1], sys.argv[2] if len(sys.argv) == 4 else ''); return
+    if len(sys.argv) in (4, 5) and sys.argv[1] == '--action':
+        action(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) == 5 else ''); return
+    if len(sys.argv) in (4, 5) and sys.argv[1] == '--choose':
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            action(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) == 5 else '')
+        Path(os.environ['TRANSCRIPT_SESSION']).with_suffix('.actions').write_text(output.getvalue())
+        return
+    if len(sys.argv) == 2 and sys.argv[1] == '--pending':
+        print(Path(os.environ['TRANSCRIPT_SESSION']).with_suffix('.actions').read_text(), end='')
+        return
+    run_search()
+
+
+def run_search():
     if not ROOT.is_dir():
         fail(f'Transcript directory not found: {ROOT}')
     if not shutil.which('rg') or not shutil.which('fzf'):
         fail('Transcript Search requires rg and fzf.')
-    env = dict(os.environ, TRANSCRIPT_ROOT=str(ROOT), VIDEO_ROOT=str(VIDEO_ROOT), FZF_DEFAULT_COMMAND=SCRIPT + ' --concepts')
-    result = subprocess.run(['fzf', '--delimiter=\t', '--with-nth=3..', '--header-lines=1',
-        '--prompt=Search concepts> ', '--header=Enter: MPV  |  Ctrl-O: open with  |  Ctrl-T: transcript regex search  |  Esc: quit',
-        '--bind', f'ctrl-t:unbind(change)+disable-search+clear-query+change-prompt(Regex> )+change-header(Enter: MPV | Ctrl-O: open with | Ctrl-R: concepts | Esc: quit)+reload({SCRIPT} --query {{q}})+rebind(change),change:reload:{SCRIPT} --query {{q}}',
-        '--bind', f'ctrl-r:unbind(change)+enable-search+clear-query+change-prompt(Search concepts> )+change-header(Enter: MPV | Ctrl-O: open with | Ctrl-T: transcript regex search | Esc: quit)+reload({SCRIPT} --concepts)',
-        '--preview', f'{SCRIPT} --preview {{}}', '--preview-window=down,40%,wrap',
-        '--bind', 'start:unbind(change)', '--expect=ctrl-o'], stdout=subprocess.PIPE, text=True, env=env)
-    if result.returncode or not result.stdout:
-        return
-    key, _, row = result.stdout.partition('\n')
+    with tempfile.TemporaryDirectory(prefix='transcript-search-') as directory:
+        filename = Path(directory) / 'session.json'
+        filename.write_text(json.dumps({'mode': 'regex', 'directories': ['.']}))
+        env = dict(os.environ, TRANSCRIPT_ROOT=str(ROOT), VIDEO_ROOT=str(VIDEO_ROOT),
+                   TRANSCRIPT_SESSION=str(filename), FZF_DEFAULT_COMMAND=SCRIPT + " --results ''")
+        args = ['fzf', '--ansi', '--disabled', '--delimiter=\t', '--with-nth=3..', '--header-lines=1',
+                '--layout=reverse', '--prompt=Regex> ',
+                '--header=RET: MPV | C-t: regex | C-l: literal | C-r: concepts | M-s: directories | M-x: commands | C-h: keys',
+                '--bind', EDIT_BINDINGS,
+                '--bind', f'change:reload:{SCRIPT} --results {{q}}',
+                '--preview', f'{SCRIPT} --preview {{q}} {{}}', '--preview-window=down,40%,wrap,+{2}/2',
+                '--bind', 'alt-v:toggle-preview,alt-p:preview-page-up,alt-n:preview-page-down']
+        for key, command in [('ctrl-t', 'regex'), ('ctrl-l', 'literal'), ('ctrl-r', 'concepts')]:
+            args += ['--bind', f'{key}:transform:{SCRIPT} --action {command} {{q}} {{}}']
+        for key, command in [('alt-s', 'directories'), ('alt-x', 'palette')]:
+            args += ['--bind', f'{key}:execute({SCRIPT} --choose {command} {{q}} {{}})+transform({SCRIPT} --pending)']
+        # execute keeps the finder, query cursor, preview and selection alive.
+        for key, command in [('enter', 'open'), ('ctrl-o', 'open-with'), ('ctrl-h', 'help')]:
+            args += ['--bind', f'{key}:execute({SCRIPT} --action {command} {{q}} {{}})']
+        subprocess.run(args, env=env)
+
+
+def open_result(row, choose=False):
     try:
         path, line = parse(row.rstrip('\n'))
         with path.open(encoding='utf-8', errors='replace') as f:
             selected = next(text for n, text in enumerate(f, 1) if n == line)
         match = re.match(r'^\[(\d+):(\d{2}):(\d{2})(?:[.,](\d+))?\]', selected)
         if not match or int(match[2]) >= 60 or int(match[3]) >= 60:
-            fail('The selected line has no recognizable timestamp.')
+            raise ValueError('The selected line has no recognizable timestamp.')
         seconds = int(match[1]) * 3600 + int(match[2]) * 60 + int(match[3])
         stamp = str(seconds) + ('.' + match[4] if match[4] else '')
         video = VIDEO_ROOT / path.relative_to(ROOT).with_suffix('.mp4')
         if not video.is_file():
             video = next((video.with_suffix(ext) for ext in ('.mkv', '.webm') if video.with_suffix(ext).is_file()), video)
         if not video.is_file():
-            fail(f'Video not found: {video}')
+            raise ValueError(f'Video not found: {video}')
     except (OSError, ValueError, StopIteration) as e:
-        fail(f'Could not read the selected result: {e}')
+        picker([f'Could not open result: {e}'], 'Open error> ', 'RET / Esc: return to search')
+        return
     choice = 'MPV'
-    if key == 'ctrl-o':
-        chooser = subprocess.run(['fzf', '--prompt=Open with> ', '--header=Enter: choose  |  Esc: cancel'],
-            input='MPV\nZen Browser\n', stdout=subprocess.PIPE, text=True, env=env)
-        if chooser.returncode:
-            return True
-        choice = chooser.stdout.strip()
+    if choose:
+        choices = picker(['MPV', 'Zen Browser'], 'Open with> ', 'RET: choose | Esc: cancel')
+        if not choices:
+            return
+        choice = choices[0]
     if choice == 'MPV':
         command = [os.environ.get('MPV_BIN', 'mpv'), '--start=' + stamp, '--', str(video)]
     elif choice == 'Zen Browser':
@@ -213,8 +426,7 @@ def run_search():
     try:
         subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     except OSError as e:
-        fail(f'Could not launch {choice}: {e}')
-    return True
+        picker([f'Could not launch {choice}: {e}'], 'Open error> ', 'RET / Esc: return to search')
 
 
 if __name__ == '__main__':
