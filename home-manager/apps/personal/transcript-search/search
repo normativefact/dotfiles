@@ -8,21 +8,71 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(os.environ.get('TRANSCRIPT_ROOT', Path(__file__).resolve().parent.parent)).expanduser().resolve()
 VIDEO_ROOT = Path(os.environ.get('VIDEO_ROOT', Path.home() / 'ics-video-original')).expanduser().resolve()
 SCRIPT = shlex.join([sys.executable, str(Path(__file__).resolve())])
 EXCLUDES = ['excerpts/**', 'ledger_tools/**', 'research_index*/**', 'vidinspector/**']
+REGEX_HELP = r'PCRE2: pattern or /pattern/gimsux | lookarounds, backreferences, \n | bare patterns: smart case'
+
+
+def status(message):
+    # fzf applies --with-nth=3.. to header lines as well as result rows.
+    print('\t\t' + message, flush=True)
+
+
+def regex_args(term):
+    """Parse slash literals without interpreting backslashes in the pattern."""
+    if not term.startswith('/'):
+        return ['--smart-case'], term
+    # A delimiter must be unescaped and outside a character class.
+    escaped = in_class = False
+    closing = None
+    for i, char in enumerate(term[1:], 1):
+        if escaped:
+            escaped = False
+        elif char == '\\':
+            escaped = True
+        elif char == '[' and not in_class:
+            in_class = True
+        elif char == ']' and in_class:
+            in_class = False
+        elif char == '/' and not in_class:
+            closing = i
+            break
+    if closing is None:
+        raise ValueError('Unclosed /pattern/ literal; escape a literal slash as \\/')
+    flags = term[closing + 1:]
+    if any(flag not in 'gimsux' for flag in flags):
+        raise ValueError('Supported flags: g, i, m, s, u, x')
+    if len(flags) != len(set(flags)):
+        raise ValueError('Duplicate regex flag')
+    # rg searches globally and uses Unicode by default. Literal syntax has
+    # explicit case and anchor semantics; bare patterns keep rg's defaults.
+    enabled = ''.join(flag for flag in 'imsx' if flag in flags)
+    disabled = ''.join(flag for flag in 'imsx' if flag not in flags)
+    options = enabled + ('-' + disabled if disabled else '')
+    return ['--case-sensitive'], f'(?{options})' + term[1:closing]
 
 
 def query(term):
     if not term:
+        status(REGEX_HELP)
         return
-    args = ['rg', '--json', '--smart-case', '--glob', '*.txt']
-    for pattern in EXCLUDES:
-        args += ['--glob', '!' + pattern]
-    args += ['--', term, '.']
-    proc = subprocess.Popen(args, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        case_args, pattern = regex_args(term)
+    except ValueError as error:
+        status(f'Regex error: {error}')
+        return
+    args = ['rg', '--no-config', '--json', '--pcre2', '--multiline', *case_args, '--glob', '*.txt']
+    for excluded in EXCLUDES:
+        args += ['--glob', '!' + excluded]
+    args += ['--', pattern, '.']
+    errors = tempfile.TemporaryFile()
+    proc = subprocess.Popen(args, cwd=ROOT, stdout=subprocess.PIPE, stderr=errors)
+    header_shown = False
+    interrupted = False
     try:
         for raw in proc.stdout:
             event = json.loads(raw)
@@ -33,15 +83,48 @@ def query(term):
             content = data['lines'].get('text')
             if path is None or content is None:
                 continue
+            if not header_shown:
+                status(REGEX_HELP)
+                header_shown = True
             token = base64.urlsafe_b64encode(os.fsencode(path)).decode()
             display = path.replace('\t', ' ').replace('\n', ' ')
-            content = content.rstrip('\r\n').replace('\t', ' ')
-            print(f"{token}\t{data['line_number']}\t{display}:{data['line_number']}: {content}", flush=True)
+            # A multiline JSON event can cover several timestamped lines.
+            # Keep each line's original number for preview and video seeking.
+            for offset, text in enumerate(content.rstrip('\r\n').split('\n')):
+                text = re.sub(r'^\[[^]]+\]\s*', '', text.rstrip('\r').replace('\t', ' '))
+                print(f"{token}\t{data['line_number'] + offset}\t{Path(display).stem} — {text}", flush=True)
     except BrokenPipeError:
+        interrupted = True
         proc.kill()
     finally:
         proc.stdout.close()
         proc.wait()
+        if not header_shown and not interrupted:
+            errors.seek(0)
+            error = ' '.join(errors.read().decode(errors='replace').split())
+            status(f'Search error: {error}' if proc.returncode > 1 else 'No matches')
+        errors.close()
+
+
+def concepts():
+    status('Fuzzy concept search | Ctrl-T: PCRE2 transcript search')
+    for ledger in sorted((ROOT / 'ledgers' / '1-atomic').glob('*.json')):
+        try:
+            data = json.loads(ledger.read_text())
+            path = Path(data['source_path']).with_suffix('.txt')
+            if data.get('is_removed') or not (ROOT / path).is_file():
+                continue
+            lines = (ROOT / path).read_text(errors='replace').splitlines()
+            for segment in data.get('segments', []):
+                stamp = segment['start_time']
+                line = next((i for i, text in enumerate(lines, 1) if text.startswith('[' + stamp + ']') or text.startswith('[' + stamp + '.')), None)
+                if line is None:
+                    continue
+                token = base64.urlsafe_b64encode(os.fsencode(str(path))).decode()
+                detail = ' '.join(str(segment.get(k, '')) for k in ('subject', 'substance', 'verbatim_quote'))
+                print(f"{token}\t{line}\t{path.stem} — {' '.join(detail.split())}")
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
 
 
 def parse(row):
@@ -73,6 +156,13 @@ def fail(message):
 
 
 def main():
+    while run_search():
+        pass
+
+
+def run_search():
+    if len(sys.argv) == 2 and sys.argv[1] == '--concepts':
+        concepts(); return
     if len(sys.argv) == 3 and sys.argv[1] == '--query':
         query(sys.argv[2]); return
     if len(sys.argv) == 3 and sys.argv[1] == '--preview':
@@ -81,12 +171,13 @@ def main():
         fail(f'Transcript directory not found: {ROOT}')
     if not shutil.which('rg') or not shutil.which('fzf'):
         fail('Transcript Search requires rg and fzf.')
-    env = dict(os.environ, TRANSCRIPT_ROOT=str(ROOT), VIDEO_ROOT=str(VIDEO_ROOT), FZF_DEFAULT_COMMAND='')
-    result = subprocess.run(['fzf', '--disabled', '--delimiter=\t', '--with-nth=3..',
-        '--prompt=Search transcripts> ', '--header=Enter: MPV  |  Ctrl-O: open with  |  Esc: quit',
-        '--bind', f'change:reload:{SCRIPT} --query {{q}}',
+    env = dict(os.environ, TRANSCRIPT_ROOT=str(ROOT), VIDEO_ROOT=str(VIDEO_ROOT), FZF_DEFAULT_COMMAND=SCRIPT + ' --concepts')
+    result = subprocess.run(['fzf', '--delimiter=\t', '--with-nth=3..', '--header-lines=1',
+        '--prompt=Search concepts> ', '--header=Enter: MPV  |  Ctrl-O: open with  |  Ctrl-T: transcript regex search  |  Esc: quit',
+        '--bind', f'ctrl-t:unbind(change)+disable-search+clear-query+change-prompt(Regex> )+change-header(Enter: MPV | Ctrl-O: open with | Ctrl-R: concepts | Esc: quit)+reload({SCRIPT} --query {{q}})+rebind(change),change:reload:{SCRIPT} --query {{q}}',
+        '--bind', f'ctrl-r:unbind(change)+enable-search+clear-query+change-prompt(Search concepts> )+change-header(Enter: MPV | Ctrl-O: open with | Ctrl-T: transcript regex search | Esc: quit)+reload({SCRIPT} --concepts)',
         '--preview', f'{SCRIPT} --preview {{}}', '--preview-window=down,40%,wrap',
-        '--expect=ctrl-o'], stdout=subprocess.PIPE, text=True, env=env)
+        '--bind', 'start:unbind(change)', '--expect=ctrl-o'], stdout=subprocess.PIPE, text=True, env=env)
     if result.returncode or not result.stdout:
         return
     key, _, row = result.stdout.partition('\n')
@@ -101,6 +192,8 @@ def main():
         stamp = str(seconds) + ('.' + match[4] if match[4] else '')
         video = VIDEO_ROOT / path.relative_to(ROOT).with_suffix('.mp4')
         if not video.is_file():
+            video = next((video.with_suffix(ext) for ext in ('.mkv', '.webm') if video.with_suffix(ext).is_file()), video)
+        if not video.is_file():
             fail(f'Video not found: {video}')
     except (OSError, ValueError, StopIteration) as e:
         fail(f'Could not read the selected result: {e}')
@@ -109,7 +202,7 @@ def main():
         chooser = subprocess.run(['fzf', '--prompt=Open with> ', '--header=Enter: choose  |  Esc: cancel'],
             input='MPV\nZen Browser\n', stdout=subprocess.PIPE, text=True, env=env)
         if chooser.returncode:
-            return
+            return True
         choice = chooser.stdout.strip()
     if choice == 'MPV':
         command = [os.environ.get('MPV_BIN', 'mpv'), '--start=' + stamp, '--', str(video)]
@@ -121,6 +214,7 @@ def main():
         subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     except OSError as e:
         fail(f'Could not launch {choice}: {e}')
+    return True
 
 
 if __name__ == '__main__':
